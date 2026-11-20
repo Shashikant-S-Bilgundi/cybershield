@@ -273,6 +273,108 @@ function AllowlistSection({ settings }: { settings: SystemSettings }) {
   );
 }
 
+function AiSection({ settings }: { settings: SystemSettings }) {
+  const [ai, setAi] = useState(settings.ai);
+  const { save, busy, error } = useSave();
+  const dirty = JSON.stringify(ai) !== JSON.stringify(settings.ai);
+  return (
+    <Section
+      id="ai"
+      title="AI assistant"
+      description="Explains findings, incidents and errors. Only masked evidence is sent; secret values, emails and IP addresses never are. Monitoring and alerts never depend on it."
+      busy={busy}
+      error={error}
+      dirty={dirty && (!ai.enabled || ai.shareApproved)}
+      onSubmit={(e) => {
+        e.preventDefault();
+        save({ ai }, ai.enabled ? 'AI assistant settings saved' : 'AI assistant turned off');
+      }}
+    >
+      <label className="flex cursor-pointer items-center gap-2 text-sm">
+        <input type="checkbox" checked={ai.enabled} onChange={(e) => setAi({ ...ai, enabled: e.target.checked })} className="accent-[rgb(var(--accent))]" />
+        Turn on the AI assistant
+      </label>
+      {ai.enabled && (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Provider">
+              {(id) => (
+                <Select id={id} value={ai.provider} onChange={(e) => setAi({ ...ai, provider: e.target.value as SystemSettings['ai']['provider'] })}>
+                  <option value="openai">OpenAI</option>
+                  <option value="anthropic">Anthropic</option>
+                  <option value="azure_openai">Azure OpenAI</option>
+                </Select>
+              )}
+            </Field>
+            <Field label="Model">{(id) => <Input id={id} value={ai.model} onChange={(e) => setAi({ ...ai, model: e.target.value })} className="font-mono text-xs" />}</Field>
+          </div>
+          <label className="flex cursor-pointer items-start gap-2 rounded border border-line px-3 py-2 text-sm">
+            <input type="checkbox" checked={ai.shareApproved} onChange={(e) => setAi({ ...ai, shareApproved: e.target.checked })} className="mt-0.5 accent-[rgb(var(--accent))]" />
+            <span>
+              I approve sending masked evidence (finding details, stack traces of our own code, incident timelines) to this provider.
+              <span className="block text-xs text-muted">The provider API key is set on the server, not here.</span>
+            </span>
+          </label>
+        </>
+      )}
+    </Section>
+  );
+}
+
+function SsoSection({ settings }: { settings: SystemSettings }) {
+  const [sso, setSso] = useState(settings.sso);
+  const [secret, setSecret] = useState('');
+  const { save, busy, error } = useSave();
+  const dirty = JSON.stringify(sso) !== JSON.stringify(settings.sso) || !!secret;
+  const callback = `${window.location.origin}/api/v1/auth/sso/callback`;
+  return (
+    <Section
+      id="sso"
+      title="Single sign-on"
+      description="Let people sign in with their Google Workspace or Microsoft account. ShieldOps still asks for its own two-factor code afterwards, and only invited people can get in."
+      busy={busy}
+      error={error}
+      dirty={dirty}
+      onSubmit={(e) => {
+        e.preventDefault();
+        save({ sso: { ...sso, ...(secret ? { clientSecret: secret } : {}) } }, sso.enabled ? 'Single sign-on is on' : 'Single sign-on settings saved');
+        setSecret('');
+      }}
+    >
+      <label className="flex cursor-pointer items-center gap-2 text-sm">
+        <input type="checkbox" checked={sso.enabled} onChange={(e) => setSso({ ...sso, enabled: e.target.checked })} className="accent-[rgb(var(--accent))]" />
+        Turn on single sign-on
+      </label>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Provider">
+          {(id) => (
+            <Select id={id} value={sso.provider} onChange={(e) => setSso({ ...sso, provider: e.target.value as SystemSettings['sso']['provider'] })}>
+              <option value="google">Google Workspace</option>
+              <option value="entra">Microsoft Entra ID</option>
+            </Select>
+          )}
+        </Field>
+        <Field label="Allowed email domain">{(id) => <Input id={id} value={sso.domain} onChange={(e) => setSso({ ...sso, domain: e.target.value })} placeholder="example.com" />}</Field>
+        <Field label="Client ID">{(id) => <Input id={id} value={sso.clientId} onChange={(e) => setSso({ ...sso, clientId: e.target.value })} className="font-mono text-xs" />}</Field>
+        <Field label="Client secret" hint={settings.sso.clientSecretSet ? 'Saved. Enter a new one only to replace it.' : undefined}>
+          {(id, d) => <Input id={id} aria-describedby={d} type="password" value={secret} onChange={(e) => setSecret(e.target.value)} autoComplete="new-password" placeholder={settings.sso.clientSecretSet ? '••••••••' : ''} />}
+        </Field>
+      </div>
+      <div>
+        <p className="mb-1 text-sm font-medium">Redirect URL to register with the provider</p>
+        <code className="block break-all rounded bg-sunken px-3 py-2 font-mono text-xs">{callback}</code>
+      </div>
+      <label className="flex cursor-pointer items-start gap-2 rounded border border-line px-3 py-2 text-sm">
+        <input type="checkbox" checked={sso.allowPasswordFallback} onChange={(e) => setSso({ ...sso, allowPasswordFallback: e.target.checked })} className="mt-0.5 accent-[rgb(var(--accent))]" />
+        <span>
+          Keep email and password sign-in as well
+          <span className="block text-xs text-muted">Recommended: if the identity provider is down during an incident, you can still get into ShieldOps.</span>
+        </span>
+      </label>
+    </Section>
+  );
+}
+
 export function SettingsPage() {
   const settings = useQuery({ queryKey: ['settings'], queryFn: api.getSettings });
 
@@ -288,6 +390,8 @@ export function SettingsPage() {
           {/* Each section remounts when its saved values change, so it starts from what the server has. */}
           <MonitoringSection key={JSON.stringify([settings.data!.monitoring, settings.data!.timezone])} settings={settings.data!} />
           <AllowlistSection key={JSON.stringify(settings.data!.internalAllowlist)} settings={settings.data!} />
+          <SsoSection key={JSON.stringify(settings.data!.sso)} settings={settings.data!} />
+          <AiSection key={JSON.stringify(settings.data!.ai)} settings={settings.data!} />
           <SmtpSection key={JSON.stringify(settings.data!.smtp)} settings={settings.data!} />
           <RetentionSection key={JSON.stringify(settings.data!.retention)} settings={settings.data!} />
         </div>

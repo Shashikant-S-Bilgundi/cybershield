@@ -10,6 +10,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Field';
 import { EmptyState, ErrorState, Spinner } from '@/components/ui/States';
+import { ImportAssetsDialog } from './ImportAssetsDialog';
 import { AddAssetModal } from './AddAssetModal';
 import { AssetsTable } from './AssetsTable';
 import { VerificationModal } from './VerificationModal';
@@ -21,6 +22,7 @@ export function AssetsPage() {
   const [type, setType] = useState<AssetType | 'all'>('all');
   const [search, setSearch] = useState('');
   const [adding, setAdding] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [verifyNew, setVerifyNew] = useState<Asset | null>(null);
 
   const assets = useQuery({
@@ -47,10 +49,13 @@ export function AssetsPage() {
         title="Assets"
         description={pending ? `${pending} assets are waiting for verification and won't be checked until they are.` : 'Every domain, server, database and repository ShieldOps watches.'}
         actions={
-          <Button variant="primary" onClick={() => setAdding(true)}>
-            <Plus className="h-4 w-4" aria-hidden />
-            Add asset
-          </Button>
+          <>
+            <Button onClick={() => setImporting(true)}>Import from Cloudflare or AWS</Button>
+            <Button variant="primary" onClick={() => setAdding(true)}>
+              <Plus className="h-4 w-4" aria-hidden />
+              Add asset
+            </Button>
+          </>
         }
       />
 
@@ -97,6 +102,7 @@ export function AssetsPage() {
         onCreated={(a) => a.authorization.status === 'pending' && setVerifyNew(a)}
       />
       <VerificationModal asset={verifyNew} onClose={() => setVerifyNew(null)} />
+      {importing && <ImportAssetsDialog onClose={() => setImporting(false)} />}
     </>
   );
 }

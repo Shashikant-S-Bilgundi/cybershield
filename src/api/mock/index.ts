@@ -1,38 +1,20 @@
 import { ApiError } from '../errors';
 import type { ShieldOpsApi } from '../contract';
 import type { Application, ApplicationHealth, Asset, DashboardSummary, HealthState, LoginResult, Session, User } from '@/types';
-import { emptyDb, seedDb, type MockDb } from './seed';
+import type { MockDb } from './seed';
 import { hostOf, ipInCidr, isIPv4 } from '@/lib/net';
+import { DAY, audit, clone, currentUser, db, delay, findApp, hex, id, nowIso, requireReauth, save, saveSession, state } from './core';
+import { phase7Api, type Phase7Api } from './phase7';
+import { phase8Api, type Phase8Api } from './phase8';
+import { activeIncidentCount, cleanupPhase6, phase6Api, type Phase6Api } from './phase6';
+import { cleanupPhase5, cleanupPhase5Asset, phase5Api, type Phase5Api } from './phase5';
+import { cleanupPhase4, cleanupPhase4Asset, phase4Api, type Phase4Api } from './phase4';
+import { cleanupPhase3, errorGroupsOpen, phase3Api, type Phase3Api } from './phase3';
+import { activeAlertCount, activeFindings, advanceAll, cleanupApplication, cleanupAsset, expiriesSoon, phase2Api, prodHealth, type Phase2Api } from './phase2';
 
-const DB_KEY = 'shieldops.mock.db.v1';
-const SESSION_KEY = 'shieldops.mock.session.v1';
+export { resetMockData } from './core';
+
 const REAUTH_MINUTES = 10;
-const DAY = 86_400_000;
-
-const delay = (ms = 250) => new Promise((r) => setTimeout(r, ms));
-const id = (p: string) => `${p}${Math.random().toString(36).slice(2, 10)}`;
-const hex = (n: number) => Array.from({ length: n }, () => Math.floor(Math.random() * 16).toString(16)).join('');
-const nowIso = () => new Date().toISOString();
-const clone = <T,>(v: T): T => structuredClone(v);
-
-function loadDb(): MockDb {
-  const raw = localStorage.getItem(DB_KEY);
-  if (raw) return JSON.parse(raw) as MockDb;
-  const fresh = import.meta.env.VITE_MOCK_FRESH === 'true';
-  return fresh ? emptyDb() : seedDb();
-}
-
-const db = loadDb();
-const save = () => localStorage.setItem(DB_KEY, JSON.stringify(db));
-
-type MockSession = { userId: string; reauthUntil: string | null };
-const loadSession = (): MockSession | null => {
-  const raw = localStorage.getItem(SESSION_KEY);
-  return raw ? (JSON.parse(raw) as MockSession) : null;
-};
-let session = loadSession();
-const saveSession = () =>
-  session ? localStorage.setItem(SESSION_KEY, JSON.stringify(session)) : localStorage.removeItem(SESSION_KEY);
 
 const challenges = new Map<string, { userId: string; enroll: boolean }>();
 
@@ -41,39 +23,6 @@ const publicUser = (u: MockDb['users'][number]): User => {
   const { password: _p, ...rest } = u;
   return clone(rest);
 };
-
-function currentUser() {
-  if (!session) throw new ApiError(401, 'UNAUTHENTICATED', 'Sign in to continue.');
-  const user = db.users.find((u) => u.id === session!.userId && u.status === 'active');
-  if (!user) {
-    session = null;
-    saveSession();
-    throw new ApiError(401, 'UNAUTHENTICATED', 'Sign in to continue.');
-  }
-  return user;
-}
-
-function requireReauth() {
-  currentUser();
-  if (!session?.reauthUntil || new Date(session.reauthUntil).getTime() < Date.now()) {
-    throw new ApiError(403, 'REAUTH_REQUIRED', 'Confirm your identity to continue.');
-  }
-}
-
-function audit(action: string, resourceType: string, resourceId: string | null, summary: string) {
-  const actor = session ? db.users.find((u) => u.id === session!.userId) : undefined;
-  db.auditLogs.unshift({
-    id: id('l'),
-    actorId: actor?.id ?? null,
-    actorName: actor?.name ?? 'System',
-    action,
-    resourceType,
-    resourceId,
-    summary,
-    ip: '127.0.0.1',
-    at: nowIso(),
-  });
-}
 
 const validCode = (code: string) => /^\d{6}$/.test(code) && code !== '000000';
 
@@ -93,27 +42,6 @@ function startChallenge(userId: string, enroll: boolean): LoginResult {
   };
 }
 
-function findApp(appId: string) {
-  const app = db.applications.find((a) => a.id === appId);
-  if (!app) throw new ApiError(404, 'NOT_FOUND', 'Application not found.');
-  return app;
-}
-
-function healthFor(app: Application): ApplicationHealth {
-  const prod = app.environments.find((e) => e.type === 'production') ?? app.environments[0];
-  const ticks = prod ? db.health[prod.id] ?? [] : [];
-  const last = ticks.at(-1)?.state ?? 'unknown';
-  const counted = ticks.filter((t) => t.state !== 'unknown' && t.state !== 'paused');
-  const good = counted.filter((t) => t.state !== 'down').length;
-  return {
-    applicationId: app.id,
-    environmentId: prod?.id ?? '',
-    state: app.status === 'archived' ? 'paused' : last,
-    uptime30d: counted.length ? Math.round((good / counted.length) * 10000) / 100 : null,
-    ticks: clone(ticks),
-  };
-}
-
 function validateIdentifier(type: Asset['type'], identifier: string) {
   const v = identifier.trim();
   const ok: Record<Asset['type'], boolean> = {
@@ -129,7 +57,7 @@ function validateIdentifier(type: Asset['type'], identifier: string) {
   if (!ok[type]) throw new ApiError(422, 'INVALID_IDENTIFIER', 'That identifier does not match the asset type.');
 }
 
-export const mockApi: ShieldOpsApi = {
+const phase1Api: Omit<ShieldOpsApi, keyof Phase2Api | keyof Phase3Api | keyof Phase4Api | keyof Phase5Api | keyof Phase6Api | keyof Phase7Api | keyof Phase8Api> = {
   async setupStatus() {
     await delay(150);
     return { needsSetup: db.users.length === 0 };
@@ -162,18 +90,18 @@ export const mockApi: ShieldOpsApi = {
     const user = db.users.find((u) => u.id === ch.userId)!;
     user.mfaEnabled = true;
     user.lastLoginAt = nowIso();
-    session = { userId: user.id, reauthUntil: new Date(Date.now() + REAUTH_MINUTES * 60_000).toISOString() };
+    state.session = { userId: user.id, reauthUntil: new Date(Date.now() + REAUTH_MINUTES * 60_000).toISOString() };
     saveSession();
     audit(ch.enroll ? 'auth.mfa_enrolled' : 'auth.login', 'session', null, ch.enroll ? 'Enrolled MFA and signed in' : 'Signed in');
     save();
-    return { user: publicUser(user), reauthUntil: session.reauthUntil };
+    return { user: publicUser(user), reauthUntil: state.session.reauthUntil };
   },
 
   async me(): Promise<Session | null> {
     await delay(120);
-    if (!session) return null;
+    if (!state.session) return null;
     try {
-      return { user: publicUser(currentUser()), reauthUntil: session.reauthUntil };
+      return { user: publicUser(currentUser()), reauthUntil: state.session.reauthUntil };
     } catch {
       return null;
     }
@@ -181,8 +109,8 @@ export const mockApi: ShieldOpsApi = {
 
   async logout() {
     await delay(100);
-    if (session) audit('auth.logout', 'session', null, 'Signed out');
-    session = null;
+    if (state.session) audit('auth.logout', 'session', null, 'Signed out');
+    state.session = null;
     saveSession();
     save();
   },
@@ -192,11 +120,28 @@ export const mockApi: ShieldOpsApi = {
     const user = currentUser();
     const ok = (password && password === user.password) || (code && validCode(code));
     if (!ok) throw new ApiError(401, 'INVALID_REAUTH', 'That password or code is not correct.');
-    session!.reauthUntil = new Date(Date.now() + REAUTH_MINUTES * 60_000).toISOString();
+    state.session!.reauthUntil = new Date(Date.now() + REAUTH_MINUTES * 60_000).toISOString();
     saveSession();
     audit('auth.reauth', 'session', null, 'Re-authenticated for a critical action');
     save();
-    return { reauthUntil: session!.reauthUntil };
+    return { reauthUntil: state.session!.reauthUntil };
+  },
+
+  async getSsoConfig() {
+    await delay(100);
+    const { enabled, provider, allowPasswordFallback } = db.settings.sso;
+    return { enabled, provider, allowPasswordFallback };
+  },
+
+  async ssoLogin(provider) {
+    await delay(900);
+    const sso = db.settings.sso;
+    if (!sso.enabled || sso.provider !== provider) throw new ApiError(409, 'SSO_DISABLED', 'Single sign-on is not set up for this provider.');
+    // The mock skips the identity provider round trip and signs in the demo account.
+    const user = db.users.find((u) => u.status === 'active' && u.email.endsWith(`@${sso.domain}`)) ?? db.users.find((u) => u.status === 'active')!;
+    audit('auth.sso', 'session', null, `Signed in with ${provider === 'google' ? 'Google Workspace' : 'Microsoft Entra ID'} as ${user.email}`);
+    save();
+    return startChallenge(user.id, !user.mfaEnabled);
   },
 
   async getInvite(token) {
@@ -222,37 +167,22 @@ export const mockApi: ShieldOpsApi = {
   async dashboard(): Promise<DashboardSummary> {
     await delay();
     currentUser();
+    advanceAll();
     const active = db.applications.filter((a) => a.status === 'active');
-    const healthByApp = active.map(healthFor);
+    const healthByApp: ApplicationHealth[] = active.map((app: Application) => prodHealth(app));
     const health: Record<HealthState, number> = { up: 0, degraded: 0, down: 0, unknown: 0, paused: 0 };
     healthByApp.forEach((h) => (health[h.state] += 1));
-    const t = Date.now();
-    const expiryDays: Record<string, [number | null, 'ssl' | 'domain']> = {
-      s1: [12, 'ssl'],
-      s5: [41, 'domain'],
-      s13: [5, 'ssl'],
-      s11: [null, 'domain'],
-    };
-    const expiries = db.assets
-      .filter((a) => expiryDays[a.id])
-      .map((a) => {
-        const [days, kind] = expiryDays[a.id];
-        return {
-          assetId: a.id,
-          applicationId: a.applicationId,
-          kind,
-          identifier: hostOf(a.identifier),
-          expiresAt: days === null ? null : new Date(t + days * DAY).toISOString(),
-        };
-      });
+    const findingsBySeverity = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
+    activeFindings().forEach((f) => (findingsBySeverity[f.severity] += 1));
+    save();
     return {
       applications: active.length,
       health,
-      openAlerts: 3,
-      activeIncidents: 1,
-      findingsBySeverity: { critical: 1, high: 4, medium: 9, low: 6, info: 3 },
-      errorGroupsOpen: 12,
-      expiries,
+      openAlerts: activeAlertCount(),
+      activeIncidents: activeIncidentCount(),
+      findingsBySeverity,
+      errorGroupsOpen: errorGroupsOpen(),
+      expiries: expiriesSoon(),
       healthByApp,
     };
   },
@@ -335,6 +265,11 @@ export const mockApi: ShieldOpsApi = {
     const app = findApp(appId);
     db.applications = db.applications.filter((a) => a.id !== appId);
     db.assets = db.assets.filter((a) => a.applicationId !== appId);
+    cleanupApplication(appId);
+    cleanupPhase3(appId);
+    cleanupPhase4(appId);
+    cleanupPhase5(appId);
+    cleanupPhase6(appId);
     audit('application.delete', 'application', appId, `Deleted application ${app.name} (restorable for 30 days)`);
     save();
   },
@@ -441,6 +376,9 @@ export const mockApi: ShieldOpsApi = {
     const asset = db.assets.find((a) => a.id === assetId);
     if (!asset) throw new ApiError(404, 'NOT_FOUND', 'Asset not found.');
     db.assets = db.assets.filter((a) => a.id !== assetId);
+    cleanupAsset(assetId);
+    cleanupPhase4Asset(assetId);
+    cleanupPhase5Asset(assetId);
     audit('asset.delete', 'asset', assetId, `Deleted ${asset.identifier} (restorable for 30 days)`);
     save();
   },
@@ -549,8 +487,17 @@ export const mockApi: ShieldOpsApi = {
   async updateSettings(input) {
     await delay();
     requireReauth();
-    const { smtp, ...rest } = input;
+    const { smtp, sso, ...rest } = input;
     Object.assign(db.settings, clone(rest));
+    if (sso) {
+      const { clientSecret, ...ssoRest } = sso;
+      const next = { ...db.settings.sso, ...ssoRest };
+      if (next.enabled && (!/^[\w.-]+\.[a-z]{2,}$/i.test(next.domain) || !next.clientId.trim() || !(clientSecret || next.clientSecretSet))) {
+        throw new ApiError(422, 'SSO_INCOMPLETE', 'Enter the allowed domain, client ID and client secret before turning on single sign-on.');
+      }
+      db.settings.sso = next;
+      if (clientSecret) db.settings.sso.clientSecretSet = true;
+    }
     if (smtp) {
       const { password, ...smtpRest } = smtp;
       Object.assign(db.settings.smtp, smtpRest);
@@ -562,9 +509,4 @@ export const mockApi: ShieldOpsApi = {
   },
 };
 
-/** Clears mock data and session; used by the "Reset demo data" button in development. */
-export function resetMockData() {
-  localStorage.removeItem(DB_KEY);
-  localStorage.removeItem(SESSION_KEY);
-  window.location.assign('/');
-}
+export const mockApi: ShieldOpsApi = { ...phase1Api, ...phase2Api, ...phase3Api, ...phase4Api, ...phase5Api, ...phase6Api, ...phase7Api, ...phase8Api };

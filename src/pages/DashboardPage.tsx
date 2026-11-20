@@ -64,17 +64,18 @@ export function DashboardPage() {
         }
       />
 
-      <section aria-label="Summary" className="mb-6 grid grid-cols-2 divide-line overflow-hidden rounded-lg border border-line bg-surface md:grid-cols-4 md:divide-x">
+      <section aria-label="Summary" className="mb-6 grid grid-cols-2 divide-line overflow-hidden rounded-lg border border-line bg-surface md:grid-cols-5 md:divide-x">
         {[
-          { label: 'Down', value: data.health.down, tone: data.health.down ? 'text-down' : '' },
-          { label: 'Degraded', value: data.health.degraded, tone: data.health.degraded ? 'text-degraded' : '' },
-          { label: 'Open alerts', value: data.openAlerts, tone: '' },
-          { label: 'Active incidents', value: data.activeIncidents, tone: '' },
+          { label: 'Applications down', value: data.health.down, tone: data.health.down ? 'text-down' : '', to: '/monitors' },
+          { label: 'Degraded', value: data.health.degraded, tone: data.health.degraded ? 'text-degraded' : '', to: '/monitors' },
+          { label: 'Alerts needing attention', value: data.openAlerts, tone: data.openAlerts ? 'text-high' : '', to: '/alerts' },
+          { label: 'Errors to fix', value: data.errorGroupsOpen, tone: '', to: '/errors' },
+          { label: 'Active incidents', value: data.activeIncidents, tone: '', to: '/incidents' },
         ].map((m) => (
-          <div key={m.label} className="border-b border-line px-4 py-3 md:border-b-0">
+          <Link key={m.label} to={m.to} className="border-b border-line px-4 py-3 hover:bg-sunken/60 md:border-b-0">
             <p className="text-xs text-muted">{m.label}</p>
             <p className={cn('mt-0.5 text-2xl font-semibold tabular-nums', m.tone)}>{m.value}</p>
-          </div>
+          </Link>
         ))}
       </section>
 
@@ -129,7 +130,9 @@ export function DashboardPage() {
           <section aria-labelledby="findings-title" className="rounded-lg border border-line bg-surface p-4">
             <div className="flex items-baseline justify-between">
               <h2 id="findings-title" className="font-semibold">
-                Open findings
+                <Link to="/findings" className="hover:underline">
+                  Open findings
+                </Link>
               </h2>
               <span className="text-sm tabular-nums text-muted">{totalFindings}</span>
             </div>
@@ -159,7 +162,8 @@ export function DashboardPage() {
                 {expiries.map((e) => {
                   const days = e.expiresAt ? daysUntil(e.expiresAt) : null;
                   return (
-                    <li key={`${e.assetId}-${e.kind}`} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                    <li key={`${e.assetId}-${e.kind}`}>
+                      <Link to={e.kind === 'ssl' ? '/ssl-dns' : '/domain-expiry'} className="flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-sunken/60">
                       <div className="min-w-0">
                         <p className="truncate font-mono text-xs">{e.identifier}</p>
                         <p className="text-xs text-muted">{e.kind === 'ssl' ? 'SSL certificate' : 'Domain registration'}</p>
@@ -172,6 +176,7 @@ export function DashboardPage() {
                       >
                         {days === null ? 'Unavailable' : `${days} days`}
                       </span>
+                      </Link>
                     </li>
                   );
                 })}

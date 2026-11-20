@@ -13,7 +13,6 @@ import { CriticalityMeter, HealthBadge } from '@/components/ui/Badge';
 import { HealthRibbon } from '@/components/ui/HealthRibbon';
 import { EmptyState, ErrorState, Spinner } from '@/components/ui/States';
 import { toast } from '@/components/ui/toastStore';
-import { PhaseNotice } from '@/components/PhaseNotice';
 import { ConfirmDialog } from '@/components/security/ConfirmDialog';
 import { useCritical } from '@/components/security/reauth';
 import { AssetsTable } from '@/pages/assets/AssetsTable';
@@ -21,6 +20,9 @@ import { AddAssetModal } from '@/pages/assets/AddAssetModal';
 import { VerificationModal } from '@/pages/assets/VerificationModal';
 import { isAuthorized } from '@/lib/assets';
 import { ApplicationFormModal } from './ApplicationFormModal';
+import { HealthTab, IssuesTab, SecurityTab } from './AppMonitoringTabs';
+import { ErrorsTab, PerformanceTab } from './AppTelemetryTabs';
+import { InfrastructureTab } from './AppInfrastructureTab';
 
 export function ApplicationDetailPage() {
   const { id = '' } = useParams();
@@ -61,13 +63,13 @@ export function ApplicationDetailPage() {
       </div>
       <Routes>
         <Route index element={<Overview app={a} assets={assets.data ?? []} />} />
-        <Route path="health" element={<PhaseNotice phase={2} title="Uptime and health checks" body="Each environment's monitors, response times and uptime history will appear here once availability monitoring is built." />} />
-        <Route path="errors" element={<PhaseNotice phase={3} title="Errors and exceptions" body="Error groups from the ShieldOps SDK, with first seen, last seen and regressions, per environment." />} />
-        <Route path="performance" element={<PhaseNotice phase={3} title="API performance" body="Request rate, error rate and p95 latency per route, sent by the SDK every 60 seconds." />} />
-        <Route path="infrastructure" element={<PhaseNotice phase={4} title="Servers and containers" body="CPU, memory, disk, services and containers reported by the server agent." />} />
-        <Route path="security" element={<PhaseNotice phase={2} title="Security posture" body="SSL, DNS, headers and security events start in phase 2 and 3; secrets and vulnerabilities in phase 5." />} />
+        <Route path="health" element={<HealthTab app={a} />} />
+        <Route path="errors" element={<ErrorsTab app={a} />} />
+        <Route path="performance" element={<PerformanceTab app={a} />} />
+        <Route path="infrastructure" element={<InfrastructureTab app={a} />} />
+        <Route path="security" element={<SecurityTab app={a} />} />
         <Route path="assets" element={<AssetsTab app={a} assets={assets.data ?? []} loading={assets.isLoading} />} />
-        <Route path="issues" element={<PhaseNotice phase={2} title="Alerts, findings and incidents" body="Everything open for this application, sorted by risk priority." />} />
+        <Route path="issues" element={<IssuesTab app={a} />} />
         <Route path="settings" element={<SettingsTab app={a} />} />
       </Routes>
     </>
@@ -76,6 +78,11 @@ export function ApplicationDetailPage() {
 
 function Overview({ app, assets }: { app: Application; assets: Asset[] }) {
   const dash = useQuery({ queryKey: ['dashboard'], queryFn: api.dashboard });
+  const monitors = useQuery({ queryKey: ['monitors', { applicationId: app.id }], queryFn: () => api.listMonitors({ applicationId: app.id }) });
+  const keys = useQuery({ queryKey: ['ingestion-keys', { applicationId: app.id }], queryFn: () => api.listIngestionKeys({ applicationId: app.id }) });
+  const sdkLive = (keys.data ?? []).some((k) => k.status === 'active' && k.lastUsedAt);
+  const servers = useQuery({ queryKey: ['servers', { applicationId: app.id }], queryFn: () => api.listServers({ applicationId: app.id }) });
+  const repos = useQuery({ queryKey: ['repositories', { applicationId: app.id }], queryFn: () => api.listRepositories({ applicationId: app.id }) });
   const users = useQuery({ queryKey: ['users'], queryFn: api.listUsers });
   const health = dash.data?.healthByApp.find((h) => h.applicationId === app.id);
   const owner = users.data?.find((u) => u.id === app.ownerId);
@@ -84,10 +91,10 @@ function Overview({ app, assets }: { app: Application; assets: Asset[] }) {
   const steps = [
     { done: assets.length > 0, label: 'Add its assets', detail: 'Domains, websites, APIs, servers, databases and repositories.', to: `/applications/${app.id}/assets` },
     { done: verified, label: 'Prove you control them', detail: 'Unverified assets are never checked or scanned.', to: `/applications/${app.id}/assets` },
-    { done: false, label: 'Turn on monitors', detail: 'Uptime, SSL, DNS and header checks.', phase: 2 },
-    { done: false, label: 'Install the SDK', detail: 'Errors, performance and security events from the app itself.', phase: 3 },
-    { done: false, label: 'Install the server agent', detail: 'CPU, memory, disk and services.', phase: 4 },
-    { done: false, label: 'Connect its repository', detail: 'Secret and vulnerability scanning.', phase: 5 },
+    { done: (monitors.data?.length ?? 0) > 0, label: 'Turn on uptime checks', detail: 'SSL, DNS, domain and header checks start automatically for verified assets.', to: `/applications/${app.id}/health` },
+    { done: sdkLive, label: 'Install the SDK', detail: 'Errors, performance and security events from the app itself.', to: '/ingestion' },
+    { done: (servers.data?.length ?? 0) > 0, label: 'Install the server agent', detail: 'CPU, memory, disk, services and containers.', to: '/ingestion#agents' },
+    { done: (repos.data?.length ?? 0) > 0, label: 'Connect its repository', detail: 'Secret and vulnerability scanning on every push.', to: '/repositories' },
   ];
 
   return (
@@ -137,7 +144,6 @@ function Overview({ app, assets }: { app: Application; assets: Asset[] }) {
                   </p>
                   <p className="text-xs text-muted">{s.detail}</p>
                 </div>
-                {s.phase && <span className="text-2xs text-muted">Phase {s.phase}</span>}
               </li>
             ))}
           </ol>

@@ -20,6 +20,44 @@ import { AuditLogsPage } from '@/pages/AuditLogsPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { ComingSoonPage } from '@/pages/ComingSoonPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
+import { MonitorsPage } from '@/pages/monitoring/MonitorsPage';
+import { MonitorDetailPage } from '@/pages/monitoring/MonitorDetailPage';
+import { HeartbeatsPage } from '@/pages/monitoring/HeartbeatsPage';
+import { SslDnsPage } from '@/pages/monitoring/SslDnsPage';
+import { DomainExpiryPage } from '@/pages/monitoring/DomainExpiryPage';
+import { SecurityHeadersPage } from '@/pages/monitoring/SecurityHeadersPage';
+import { AlertsPage } from '@/pages/operations/AlertsPage';
+import { FindingsPage } from '@/pages/operations/FindingsPage';
+import { FindingDetailPage } from '@/pages/operations/FindingDetailPage';
+import { AlertRulesPage } from '@/pages/admin/AlertRulesPage';
+import { IngestionPage } from '@/pages/admin/IngestionPage';
+import { ErrorsPage } from '@/pages/telemetry/ErrorsPage';
+import { ErrorDetailPage } from '@/pages/telemetry/ErrorDetailPage';
+import { PerformancePage } from '@/pages/telemetry/PerformancePage';
+import { SecurityEventsPage } from '@/pages/telemetry/SecurityEventsPage';
+import { LoginActivityPage } from '@/pages/telemetry/LoginActivityPage';
+import { ServersPage } from '@/pages/infrastructure/ServersPage';
+import { ServerDetailPage } from '@/pages/infrastructure/ServerDetailPage';
+import { DatabasesPage } from '@/pages/infrastructure/DatabasesPage';
+import { RepositoriesPage } from '@/pages/code/RepositoriesPage';
+import { RepositoryDetailPage } from '@/pages/code/RepositoryDetailPage';
+import { SecretsPage } from '@/pages/code/SecretsPage';
+import { VulnerabilitiesPage } from '@/pages/code/VulnerabilitiesPage';
+import { DependenciesPage } from '@/pages/code/DependenciesPage';
+import { ImagesPage } from '@/pages/code/ImagesPage';
+import { IntegrationsPage } from '@/pages/admin/IntegrationsPage';
+import { IncidentsPage } from '@/pages/operations/IncidentsPage';
+import { IncidentDetailPage } from '@/pages/operations/IncidentDetailPage';
+import { RemediationPage } from '@/pages/operations/RemediationPage';
+import { AiAnalystPage } from '@/pages/intel/AiAnalystPage';
+import { RecommendationsPage } from '@/pages/intel/RecommendationsPage';
+import { ReportsPage } from '@/pages/intel/ReportsPage';
+import { ReportViewPage } from '@/pages/intel/ReportViewPage';
+import { CompliancePage } from '@/pages/intel/CompliancePage';
+import { ReleasesPage } from '@/pages/ops/ReleasesPage';
+import { LogsPage } from '@/pages/ops/LogsPage';
+import { AnomaliesPage } from '@/pages/ops/AnomaliesPage';
+import { CloudIdentityPage } from '@/pages/security/CloudIdentityPage';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 const onAuthError = (e: unknown) => {
@@ -108,6 +146,44 @@ export default function App() {
                   <Route path="team" element={<TeamPage />} />
                   <Route path="audit-logs" element={<AuditLogsPage />} />
                   <Route path="settings" element={<SettingsPage />} />
+                  <Route path="monitors" element={<MonitorsPage />} />
+                  <Route path="monitors/:id" element={<MonitorDetailPage />} />
+                  <Route path="heartbeats" element={<HeartbeatsPage />} />
+                  <Route path="ssl-dns" element={<SslDnsPage />} />
+                  <Route path="domain-expiry" element={<DomainExpiryPage />} />
+                  <Route path="security-headers" element={<SecurityHeadersPage />} />
+                  <Route path="alerts" element={<AlertsPage />} />
+                  <Route path="findings" element={<FindingsPage />} />
+                  <Route path="findings/:id" element={<FindingDetailPage />} />
+                  <Route path="alert-rules" element={<AlertRulesPage />} />
+                  <Route path="errors" element={<ErrorsPage />} />
+                  <Route path="errors/:id" element={<ErrorDetailPage />} />
+                  <Route path="performance" element={<PerformancePage />} />
+                  <Route path="security-events" element={<SecurityEventsPage />} />
+                  <Route path="login-activity" element={<LoginActivityPage />} />
+                  <Route path="ingestion" element={<IngestionPage />} />
+                  <Route path="servers" element={<ServersPage />} />
+                  <Route path="servers/:id" element={<ServerDetailPage />} />
+                  <Route path="databases" element={<DatabasesPage />} />
+                  <Route path="repositories" element={<RepositoriesPage />} />
+                  <Route path="repositories/:id" element={<RepositoryDetailPage />} />
+                  <Route path="secrets" element={<SecretsPage />} />
+                  <Route path="vulnerabilities" element={<VulnerabilitiesPage />} />
+                  <Route path="dependencies" element={<DependenciesPage />} />
+                  <Route path="images" element={<ImagesPage />} />
+                  <Route path="integrations" element={<IntegrationsPage />} />
+                  <Route path="incidents" element={<IncidentsPage />} />
+                  <Route path="incidents/:id" element={<IncidentDetailPage />} />
+                  <Route path="remediation" element={<RemediationPage />} />
+                  <Route path="ai-analyst" element={<AiAnalystPage />} />
+                  <Route path="recommendations" element={<RecommendationsPage />} />
+                  <Route path="reports" element={<ReportsPage />} />
+                  <Route path="reports/:id" element={<ReportViewPage />} />
+                  <Route path="compliance" element={<CompliancePage />} />
+                  <Route path="releases" element={<ReleasesPage />} />
+                  <Route path="logs" element={<LogsPage />} />
+                  <Route path="anomalies" element={<AnomaliesPage />} />
+                  <Route path="cloud-identity" element={<CloudIdentityPage />} />
                   <Route path="soon/:slug" element={<ComingSoonPage />} />
                   <Route path="*" element={<NotFoundPage />} />
                 </Route>

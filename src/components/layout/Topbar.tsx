@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
-import { LogOut, Menu, Monitor, Moon, PanelLeft, ShieldCheck, Sun } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Bell, LogOut, Menu, Monitor, Moon, PanelLeft, ShieldCheck, Sun } from 'lucide-react';
 import { api } from '@/api';
 import { useSession } from '@/store/session';
 import { usePreferences } from '@/store/preferences';
@@ -26,6 +26,8 @@ export function Topbar({ onOpenMobileNav }: { onOpenMobileNav: () => void }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const minutesLeft = useMinutesLeft(session?.reauthUntil);
+  const openAlerts = useQuery({ queryKey: ['alerts', { status: 'open' }], queryFn: () => api.listAlerts({ status: 'open' }), refetchInterval: 60_000 });
+  const openCount = openAlerts.data?.length ?? 0;
 
   useEffect(() => {
     const close = (e: MouseEvent) => {
@@ -67,6 +69,12 @@ export function Topbar({ onOpenMobileNav }: { onOpenMobileNav: () => void }) {
             Confirmed for {minutesLeft} min
           </span>
         )}
+        <Link to="/alerts" className="relative rounded p-1.5 text-muted hover:bg-sunken hover:text-ink" aria-label={openCount ? `${openCount} open alerts` : 'Alerts'} title={openCount ? `${openCount} open alerts` : 'No open alerts'}>
+          <Bell className="h-4 w-4" />
+          {openCount > 0 && (
+            <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-down px-1 text-[10px] font-semibold leading-none text-white">{openCount}</span>
+          )}
+        </Link>
         <button type="button" onClick={() => setTheme(nextTheme)} className="rounded p-1.5 text-muted hover:bg-sunken hover:text-ink" aria-label={`Theme: ${theme}. Switch to ${nextTheme}`} title={`Theme: ${theme}`}>
           <ThemeIcon className="h-4 w-4" />
         </button>

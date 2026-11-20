@@ -1,23 +1,19 @@
-import type {
-  Application,
-  Asset,
-  AuditLog,
-  HealthState,
-  HealthTick,
-  Invite,
-  SystemSettings,
-  User,
-} from '@/types';
+import type { Application, Asset, AuditLog, Invite, SystemSettings, User } from '@/types';
+import { emptyPhase2, seedPhase2, type Phase2Data } from './seed2';
+import { PHASE3_RULES, emptyPhase3, seedPhase3, type Phase3Data } from './seed3';
+import { PHASE4_RULES, emptyPhase4, seedPhase4, type Phase4Data } from './seed4';
+import { PHASE5_RULES, emptyPhase5, seedPhase5, type Phase5Data } from './seed5';
+import { emptyPhase6, seedPhase6, type Phase6Data } from './seed6';
+import { emptyPhase7, seedPhase7, type Phase7Data } from './seed7';
+import { PHASE8_RULES, emptyPhase8, seedPhase8, type Phase8Data } from './seed8';
 
-export interface MockDb {
+export interface MockDb extends Phase2Data, Phase3Data, Phase4Data, Phase5Data, Phase6Data, Phase7Data, Phase8Data {
   users: (User & { password: string })[];
   invites: (Invite & { token: string })[];
   applications: Application[];
   assets: Asset[];
   auditLogs: AuditLog[];
   settings: SystemSettings;
-  /** health ribbons for each production environment, newest last */
-  health: Record<string, HealthTick[]>;
 }
 
 const MIN = 60_000;
@@ -26,25 +22,12 @@ const now = () => Date.now();
 const iso = (t: number) => new Date(t).toISOString();
 
 /** Small deterministic PRNG so demo data is stable between reloads. */
-function prng(seed: number) {
+export function prng(seed: number) {
   let s = seed;
   return () => {
     s = (s * 1664525 + 1013904223) % 4294967296;
     return s / 4294967296;
   };
-}
-
-function ribbon(seed: number, pattern: (i: number) => HealthState): HealthTick[] {
-  const rand = prng(seed);
-  return Array.from({ length: 60 }, (_, i) => {
-    const state = pattern(i);
-    const base = state === 'degraded' ? 1800 : 180;
-    return {
-      at: iso(now() - (59 - i) * MIN),
-      state,
-      latencyMs: state === 'down' || state === 'unknown' || state === 'paused' ? null : Math.round(base + rand() * base * 0.6),
-    };
-  });
 }
 
 export const DEFAULT_SETTINGS: SystemSettings = {
@@ -59,6 +42,8 @@ export const DEFAULT_SETTINGS: SystemSettings = {
   },
   smtp: { host: '', port: 587, username: '', fromAddress: '', passwordSet: false },
   internalAllowlist: [],
+  ai: { enabled: true, provider: 'openai', model: 'gpt-4.1-mini', shareApproved: true },
+  sso: { enabled: false, provider: 'google', domain: '', clientId: '', clientSecretSet: false, allowPasswordFallback: true },
 };
 
 export function emptyDb(): MockDb {
@@ -69,7 +54,14 @@ export function emptyDb(): MockDb {
     assets: [],
     auditLogs: [],
     settings: structuredClone(DEFAULT_SETTINGS),
-    health: {},
+    ...emptyPhase2(),
+    ...emptyPhase3(),
+    ...emptyPhase4(),
+    ...emptyPhase5(),
+    ...emptyPhase6(),
+    ...emptyPhase7(),
+    ...emptyPhase8(),
+    alertRules: [...emptyPhase2().alertRules, ...structuredClone(PHASE3_RULES), ...structuredClone(PHASE4_RULES), ...structuredClone(PHASE5_RULES), ...structuredClone(PHASE8_RULES)],
   };
 }
 
@@ -155,14 +147,6 @@ export function seedDb(): MockDb {
     asset('s13', 'a5', 1, 'domain', 'www.example.com', 'Marketing domain', 'internet', verified('dns_txt')),
   ];
 
-  const health: MockDb['health'] = {
-    'a1-e1': ribbon(11, () => 'up'),
-    'a2-e1': ribbon(22, (i) => (i > 40 && i < 52 ? 'degraded' : 'up')),
-    'a3-e1': ribbon(33, (i) => (i < 20 ? 'unknown' : 'up')),
-    'a4-e1': ribbon(44, (i) => (i >= 54 ? 'down' : i > 30 && i < 34 ? 'degraded' : 'up')),
-    'a5-e1': ribbon(55, () => 'up'),
-  };
-
   const rand = prng(7);
   const actions: [string, string, string][] = [
     ['auth.login', 'session', 'Signed in'],
@@ -198,11 +182,15 @@ export function seedDb(): MockDb {
     { id: 'i1', email: 'rohit@example.com', invitedBy: 'u2', token: 'demo-invite', expiresAt: iso(t + 2 * DAY), createdAt: iso(t - DAY) },
   ];
 
+  const phase2 = seedPhase2(applications, assets);
+  const phase3 = seedPhase3();
+  const phase4 = seedPhase4();
+  const phase5 = seedPhase5(applications, [...assets, ...phase4.assets]);
+  const phase8 = seedPhase8(applications, [...assets, ...phase4.assets, ...phase5.assets]);
+
   return {
     users,
     invites,
-    applications,
-    assets,
     auditLogs,
     settings: {
       ...structuredClone(DEFAULT_SETTINGS),
@@ -212,6 +200,17 @@ export function seedDb(): MockDb {
         { cidr: '192.168.50.0/24', note: 'Build servers' },
       ],
     },
-    health,
+    ...phase2,
+    ...phase3,
+    ...phase4,
+    ...phase5,
+    ...seedPhase6(),
+    ...seedPhase7(),
+    ...phase8,
+    applications: [...applications, ...phase8.applications],
+    assets: [...assets, ...phase4.assets, ...phase5.assets, ...phase8.assets],
+    findings: [...phase2.findings, ...phase5.findings, ...phase8.findings],
+    alerts: [...phase2.alerts, ...phase3.alerts, ...phase4.alerts, ...phase5.alerts, ...phase8.alerts],
+    alertRules: [...phase2.alertRules, ...structuredClone(PHASE3_RULES), ...structuredClone(PHASE4_RULES), ...structuredClone(PHASE5_RULES), ...structuredClone(PHASE8_RULES)],
   };
 }
