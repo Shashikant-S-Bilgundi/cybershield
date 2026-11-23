@@ -1,20 +1,32 @@
 import { useState, type FormEvent } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api, USE_MOCKS } from '@/api';
-import type { LoginResult } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { Field, Input } from '@/components/ui/Field';
 import { InlineError } from '@/components/ui/States';
 import { AuthLayout } from './AuthLayout';
-import { MfaStep } from './MfaStep';
 import { useCompleteSignIn } from './useCompleteSignIn';
+
+/** Why single sign-on sent you back here (?sso=… from the backend). */
+const SSO_RETURN: Record<string, string> = {
+  not_member: 'That account is not a ShieldOps member. Ask a teammate to invite you first.',
+  domain: 'Use your work account. Only the company domain can sign in.',
+  expired: 'The sign-in took too long or started in another browser. Try again.',
+  cancelled: 'Sign-in was cancelled.',
+  unverified: 'Your identity provider has not verified that email address.',
+  invalid: 'The sign-in could not be verified. Try again, and tell IT if it keeps happening.',
+  provider: 'The identity provider refused the sign-in. Check the SSO settings.',
+  disabled: 'Single sign-on is turned off.',
+};
 
 export function LoginPage() {
   const [email, setEmail] = useState(USE_MOCKS ? 'demo@shieldops.local' : '');
   const [password, setPassword] = useState(USE_MOCKS ? 'ShieldOps!2026' : '');
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<unknown>(null);
-  const [step, setStep] = useState<LoginResult | null>(null);
+  const [params] = useSearchParams();
+  const ssoReturn = SSO_RETURN[params.get('sso') ?? ''];
+  const [error, setError] = useState<unknown>(ssoReturn ? new Error(ssoReturn) : null);
   const complete = useCompleteSignIn();
   const sso = useQuery({ queryKey: ['sso-config'], queryFn: api.getSsoConfig, retry: false });
   const ssoName = sso.data?.provider === 'entra' ? 'Microsoft' : 'Google Workspace';
@@ -24,7 +36,7 @@ export function LoginPage() {
     setBusy(true);
     setError(null);
     try {
-      setStep(await api.ssoLogin(sso.data!.provider));
+      complete(await api.ssoLogin(sso.data!.provider));
     } catch (err) {
       setError(err);
     } finally {
@@ -37,21 +49,13 @@ export function LoginPage() {
     setBusy(true);
     setError(null);
     try {
-      setStep(await api.login(email, password));
+      complete(await api.login(email, password));
     } catch (err) {
       setError(err);
     } finally {
       setBusy(false);
     }
   };
-
-  if (step) {
-    return (
-      <AuthLayout title={step.status === 'mfa_enroll' ? 'Set up two-factor sign-in' : 'Enter your code'} subtitle={showPassword && email ? email : `Signed in with ${ssoName}`}>
-        <MfaStep result={step} onDone={complete} onBack={() => setStep(null)} />
-      </AuthLayout>
-    );
-  }
 
   return (
     <AuthLayout title="Sign in" subtitle="Access is by invitation from your IT team.">
@@ -80,9 +84,8 @@ export function LoginPage() {
           </Field>
           <InlineError error={error} />
           <Button type="submit" variant="primary" className="w-full" loading={busy}>
-            Continue
+            Sign in
           </Button>
-          {USE_MOCKS && <p className="text-center text-xs text-muted">Demo mode: any 6-digit code except 000000 works for two-factor.</p>}
         </form>
       )}
     </AuthLayout>

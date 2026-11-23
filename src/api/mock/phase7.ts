@@ -292,7 +292,6 @@ function controlsFor(fw: FrameworkId): ControlDef[] {
   const closedCritical = db.incidents.filter((i) => i.status === 'closed' && i.severity === 'critical');
   const weakTls = active().filter((f) => f.source === 'ssl');
   const headerGaps = active().filter((f) => f.source === 'headers' || f.source === 'dns');
-  const MFA = users.every((u) => u.mfaEnabled);
   const p1 = active().filter((f) => f.priority === 'P1');
 
   const vulnMgmt = (): Eval =>
@@ -327,7 +326,7 @@ function controlsFor(fw: FrameworkId): ControlDef[] {
       { id: '5.17', code: 'A.5.17', title: 'Authentication information', check: () => ev(secretsLive.length ? 'not_met' : secretsAll.length ? 'partial' : 'met', ['Gitleaks scans every repository for committed credentials.'], [...secretsLive.map((f) => `${f.title} is still in the current code.`), ...(secretsAll.length > secretsLive.length ? [`${secretsAll.length - secretsLive.length} secret(s) only in history, not yet rotated.`] : [])], [{ label: 'Secrets', to: '/secrets' }]) },
       { id: '5.24', code: 'A.5.24 / 5.26', title: 'Incident management and response', check: incidentResponse },
       { id: '5.27', code: 'A.5.27', title: 'Learning from incidents', check: () => ev(closedCritical.every((i) => i.postIncident) ? 'met' : 'partial', [`${closedCritical.length} closed critical incident(s); ShieldOps requires a post-incident summary before closing them.`], closedCritical.filter((i) => !i.postIncident).map((i) => `${i.ref} has no summary.`)) },
-      { id: '8.5', code: 'A.8.5', title: 'Secure authentication', check: () => ev(MFA ? 'met' : 'partial', [`Two-factor sign-in is required for all ${users.length} ShieldOps members.`, 'Credential stuffing and brute-force detection on applications that send security events.'], MFA ? [] : ['Some members have not set up two-factor sign-in.']) },
+      { id: '8.5', code: 'A.8.5', title: 'Secure authentication', check: () => ev('partial', [`${users.length} ShieldOps members sign in with a password of at least 12 characters; critical actions ask for the password again.`, 'Credential stuffing and brute-force detection on applications that send security events.'], ['ShieldOps sign-in uses passwords only. Turn on single sign-on with two-step verification, or two-factor sign-in, to meet this fully.']) },
       { id: '8.8', code: 'A.8.8', title: 'Management of technical vulnerabilities', check: vulnMgmt },
       { id: '8.9', code: 'A.8.9', title: 'Configuration management', check: () => ev(headerGaps.length ? 'partial' : 'met', ['Daily checks of security headers and DNS records with change history.'], headerGaps.length ? [`${headerGaps.length} open header or DNS finding(s).`] : [], [{ label: 'Security headers', to: '/security-headers' }]) },
       {
@@ -350,7 +349,7 @@ function controlsFor(fw: FrameworkId): ControlDef[] {
     ];
   if (fw === 'soc2')
     return [
-      { id: 'cc6.1', code: 'CC6.1', title: 'Logical access security', check: () => ev(MFA && !secretsLive.length ? 'met' : 'partial', ['Two-factor sign-in for all ShieldOps members; re-authentication for critical actions.'], [...(MFA ? [] : ['Some members have no two-factor sign-in.']), ...(secretsLive.length ? [`${secretsLive.length} credential(s) exposed in code.`] : [])]) },
+      { id: 'cc6.1', code: 'CC6.1', title: 'Logical access security', check: () => ev('partial', ['Invitation-only accounts; re-authentication with the password for critical actions.'], ['ShieldOps sign-in uses passwords only, without a second factor.', ...(secretsLive.length ? [`${secretsLive.length} credential(s) exposed in code.`] : [])]) },
       { id: 'cc7.1', code: 'CC7.1', title: 'Detect vulnerabilities and configuration changes', check: vulnMgmt },
       { id: 'cc7.2', code: 'CC7.2', title: 'Monitor system components for anomalies', check: monitoring },
       { id: 'cc7.3', code: 'CC7.3', title: 'Evaluate security events', check: () => ev(mtta !== null && mtta <= 60 ? 'met' : 'partial', [`${db.alerts.length} alerts with acknowledgement tracking.`, mtta !== null ? `Mean time to acknowledge: ${mtta} minutes.` : ''], mtta !== null && mtta > 60 ? ['Alerts take more than an hour on average to acknowledge.'] : []) },

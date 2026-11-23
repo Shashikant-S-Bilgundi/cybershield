@@ -107,7 +107,6 @@ export function TeamPage() {
               <tr>
                 <th>Member</th>
                 <th>Status</th>
-                <th>Two-factor</th>
                 <th>Last sign-in</th>
                 <th>Invited by</th>
                 <th className="w-px" aria-label="Actions" />
@@ -123,7 +122,6 @@ export function TeamPage() {
                     <p className="text-xs text-muted">{u.email}</p>
                   </td>
                   <td className="text-sm">{u.status === 'active' ? 'Active' : <span className="text-muted">Disabled</span>}</td>
-                  <td className="text-sm">{u.mfaEnabled ? 'On' : <span className="text-degraded">Not set up</span>}</td>
                   <td className="text-sm" title={formatDate(u.lastLoginAt)}>
                     {timeAgo(u.lastLoginAt)}
                   </td>

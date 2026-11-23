@@ -10,7 +10,6 @@ export interface User {
   name: string;
   email: string;
   status: 'active' | 'disabled';
-  mfaEnabled: boolean;
   lastLoginAt: string | null;
   invitedBy: ID | null;
   createdAt: string;
@@ -183,15 +182,6 @@ export interface AiSettings {
   /** Explicit approval to send sanitized evidence to the provider. */
   shareApproved: boolean;
 }
-
-export interface MfaEnrollment {
-  secret: string;
-  otpauthUrl: string;
-}
-
-export type LoginResult =
-  | { status: 'mfa_required'; challengeId: string }
-  | { status: 'mfa_enroll'; challengeId: string; enrollment: MfaEnrollment };
 
 /* ───────────── Phase 2: availability monitoring ───────────── */
 

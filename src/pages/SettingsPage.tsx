@@ -331,7 +331,7 @@ function SsoSection({ settings }: { settings: SystemSettings }) {
     <Section
       id="sso"
       title="Single sign-on"
-      description="Let people sign in with their Google Workspace or Microsoft account. ShieldOps still asks for its own two-factor code afterwards, and only invited people can get in."
+      description="Let people sign in with their Google Workspace or Microsoft account, using that account's own two-step verification. Only invited people can get in."
       busy={busy}
       error={error}
       dirty={dirty}

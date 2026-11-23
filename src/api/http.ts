@@ -46,7 +46,6 @@ export const httpApi: ShieldOpsApi = {
   setupStatus: () => request('GET', '/setup/status'),
   setup: (input) => request('POST', '/setup', input),
   login: (email, password) => request('POST', '/auth/login', { email, password }),
-  verifyMfa: (challengeId, code) => request('POST', '/auth/mfa/verify', { challengeId, code }),
   me: async () => {
     try {
       return await request('GET', '/auth/me');

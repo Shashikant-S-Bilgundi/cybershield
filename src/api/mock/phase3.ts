@@ -393,9 +393,9 @@ export const phase3Api: Phase3Api = {
     await delay();
     currentUser();
     const DETAIL: Record<string, string> = {
-      'auth.login': 'Password and two-factor code accepted',
-      'auth.login_failed': 'Wrong password or code',
-      'auth.mfa_enrolled': 'First sign-in, two-factor set up',
+      'auth.login': 'Password accepted',
+      'auth.login_failed': 'Wrong password',
+      'auth.setup': 'First account created',
     };
     const items: ConsoleLogin[] = db.auditLogs
       .filter((l) => l.action in DETAIL)

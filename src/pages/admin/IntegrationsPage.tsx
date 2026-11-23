@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useState, type FormEvent } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api';
 import type { Integration, IntegrationType } from '@/types';
@@ -32,8 +32,25 @@ const META: Record<IntegrationType, { name: string; purpose: string }> = {
   entra: { name: 'Microsoft Entra ID', purpose: 'Identity checks for Microsoft 365 accounts. Single sign-on is set up in System settings.' },
 };
 
+/** What GitHub's return trip means, after the app installation (?github=… on the way back). */
+const GITHUB_RETURN: Record<string, { ok: boolean; text: string }> = {
+  connected: { ok: true, text: 'GitHub connected. Add repositories to start scanning.' },
+  requested: { ok: true, text: 'Installation requested. A GitHub organisation owner needs to approve it.' },
+  cancelled: { ok: false, text: 'The GitHub App was not installed.' },
+  expired: { ok: false, text: 'That GitHub sign-in took too long or came from another session. Start again.' },
+  error: { ok: false, text: 'GitHub could not confirm the installation. Try again, or check the server log.' },
+};
+
 export function IntegrationsPage() {
   const integrations = useQuery({ queryKey: ['integrations'], queryFn: api.listIntegrations });
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    const r = GITHUB_RETURN[params.get('github') ?? ''];
+    if (!r) return;
+    if (r.ok) toast.success(r.text);
+    else toast.error(r.text);
+    setParams({}, { replace: true });
+  }, [params, setParams]);
   const now = (integrations.data ?? []).filter((i) => !i.availableInPhase);
   const soon = (integrations.data ?? []).filter((i) => i.availableInPhase);
 
@@ -171,7 +188,9 @@ function GithubConnect({ onClose, onDone }: { onClose: () => void; onDone: () =>
   const critical = useCritical();
   const connect = useMutation({
     mutationFn: () => critical(() => api.connectIntegration('github')),
-    onSuccess: () => {
+    onSuccess: (result) => {
+      // The real backend sends you to GitHub to install the app; GitHub brings you back here.
+      if (result.redirectUrl) return void window.location.assign(result.redirectUrl);
       onDone();
       toast.success('GitHub connected. Add repositories to start scanning.');
       onClose();

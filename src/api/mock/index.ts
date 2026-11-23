@@ -1,6 +1,6 @@
 import { ApiError } from '../errors';
 import type { ShieldOpsApi } from '../contract';
-import type { Application, ApplicationHealth, Asset, DashboardSummary, HealthState, LoginResult, Session, User } from '@/types';
+import type { Application, ApplicationHealth, Asset, DashboardSummary, HealthState, Session, User } from '@/types';
 import type { MockDb } from './seed';
 import { hostOf, ipInCidr, isIPv4 } from '@/lib/net';
 import { DAY, audit, clone, currentUser, db, delay, findApp, hex, id, nowIso, requireReauth, save, saveSession, state } from './core';
@@ -16,30 +16,20 @@ export { resetMockData } from './core';
 
 const REAUTH_MINUTES = 10;
 
-const challenges = new Map<string, { userId: string; enroll: boolean }>();
-
 const publicUser = (u: MockDb['users'][number]): User => {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { password: _p, ...rest } = u;
   return clone(rest);
 };
 
-const validCode = (code: string) => /^\d{6}$/.test(code) && code !== '000000';
-
-function startChallenge(userId: string, enroll: boolean): LoginResult {
-  const challengeId = id('c');
-  challenges.set(challengeId, { userId, enroll });
-  if (!enroll) return { status: 'mfa_required', challengeId };
-  const secret = Array.from({ length: 32 }, () => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'[Math.floor(Math.random() * 32)]).join('');
-  const user = db.users.find((u) => u.id === userId)!;
-  return {
-    status: 'mfa_enroll',
-    challengeId,
-    enrollment: {
-      secret,
-      otpauthUrl: `otpauth://totp/ShieldOps:${encodeURIComponent(user.email)}?secret=${secret}&issuer=ShieldOps`,
-    },
-  };
+/** Starts a session straight after the password is accepted. */
+function signIn(user: MockDb['users'][number], summary: string): Session {
+  user.lastLoginAt = nowIso();
+  state.session = { userId: user.id, reauthUntil: new Date(Date.now() + REAUTH_MINUTES * 60_000).toISOString() };
+  saveSession();
+  audit(summary === 'Created the first account' ? 'auth.setup' : 'auth.login', 'session', null, summary);
+  save();
+  return { user: publicUser(user), reauthUntil: state.session.reauthUntil };
 }
 
 function validateIdentifier(type: Asset['type'], identifier: string) {
@@ -66,35 +56,20 @@ const phase1Api: Omit<ShieldOpsApi, keyof Phase2Api | keyof Phase3Api | keyof Ph
   async setup({ name, email, password }) {
     await delay();
     if (db.users.length > 0) throw new ApiError(409, 'ALREADY_SET_UP', 'ShieldOps is already set up.');
-    const user = { id: id('u'), name, email: email.toLowerCase(), password, status: 'active' as const, mfaEnabled: false, lastLoginAt: null, invitedBy: null, createdAt: nowIso() };
+    const user = { id: id('u'), name, email: email.toLowerCase(), password, status: 'active' as const, lastLoginAt: null, invitedBy: null, createdAt: nowIso() };
     db.users.push(user);
-    save();
-    return startChallenge(user.id, true);
+    return signIn(user, 'Created the first account');
   },
 
   async login(email, password) {
     await delay();
     const user = db.users.find((u) => u.email === email.toLowerCase().trim());
     if (!user || user.password !== password || user.status !== 'active') {
+      audit('auth.login_failed', 'session', null, `Failed sign-in for ${email.toLowerCase().trim()}`);
+      save();
       throw new ApiError(401, 'INVALID_CREDENTIALS', 'Email or password is incorrect.');
     }
-    return startChallenge(user.id, !user.mfaEnabled);
-  },
-
-  async verifyMfa(challengeId, code) {
-    await delay();
-    const ch = challenges.get(challengeId);
-    if (!ch) throw new ApiError(400, 'CHALLENGE_EXPIRED', 'This sign-in attempt expired. Start again.');
-    if (!validCode(code)) throw new ApiError(401, 'INVALID_CODE', 'That code is not valid. Check your authenticator app.');
-    challenges.delete(challengeId);
-    const user = db.users.find((u) => u.id === ch.userId)!;
-    user.mfaEnabled = true;
-    user.lastLoginAt = nowIso();
-    state.session = { userId: user.id, reauthUntil: new Date(Date.now() + REAUTH_MINUTES * 60_000).toISOString() };
-    saveSession();
-    audit(ch.enroll ? 'auth.mfa_enrolled' : 'auth.login', 'session', null, ch.enroll ? 'Enrolled MFA and signed in' : 'Signed in');
-    save();
-    return { user: publicUser(user), reauthUntil: state.session.reauthUntil };
+    return signIn(user, 'Signed in');
   },
 
   async me(): Promise<Session | null> {
@@ -115,11 +90,10 @@ const phase1Api: Omit<ShieldOpsApi, keyof Phase2Api | keyof Phase3Api | keyof Ph
     save();
   },
 
-  async reauth({ password, code }) {
+  async reauth({ password }) {
     await delay();
     const user = currentUser();
-    const ok = (password && password === user.password) || (code && validCode(code));
-    if (!ok) throw new ApiError(401, 'INVALID_REAUTH', 'That password or code is not correct.');
+    if (!password || password !== user.password) throw new ApiError(401, 'INVALID_REAUTH', 'That password is not correct.');
     state.session!.reauthUntil = new Date(Date.now() + REAUTH_MINUTES * 60_000).toISOString();
     saveSession();
     audit('auth.reauth', 'session', null, 'Re-authenticated for a critical action');
@@ -141,7 +115,7 @@ const phase1Api: Omit<ShieldOpsApi, keyof Phase2Api | keyof Phase3Api | keyof Ph
     const user = db.users.find((u) => u.status === 'active' && u.email.endsWith(`@${sso.domain}`)) ?? db.users.find((u) => u.status === 'active')!;
     audit('auth.sso', 'session', null, `Signed in with ${provider === 'google' ? 'Google Workspace' : 'Microsoft Entra ID'} as ${user.email}`);
     save();
-    return startChallenge(user.id, !user.mfaEnabled);
+    return signIn(user, `Signed in with ${provider === 'google' ? 'Google Workspace' : 'Microsoft Entra ID'}`);
   },
 
   async getInvite(token) {
@@ -157,11 +131,13 @@ const phase1Api: Omit<ShieldOpsApi, keyof Phase2Api | keyof Phase3Api | keyof Ph
     await delay();
     const inv = db.invites.find((i) => i.token === token);
     if (!inv) throw new ApiError(404, 'INVITE_INVALID', 'This invite link is invalid or has expired.');
-    const user = { id: id('u'), name, email: inv.email, password, status: 'active' as const, mfaEnabled: false, lastLoginAt: null, invitedBy: inv.invitedBy, createdAt: nowIso() };
+    const user = { id: id('u'), name, email: inv.email, password, status: 'active' as const, lastLoginAt: null, invitedBy: inv.invitedBy, createdAt: nowIso() };
     db.users.push(user);
     db.invites = db.invites.filter((i) => i.id !== inv.id);
+    const session = signIn(user, 'Signed in for the first time');
+    audit('user.join', 'user', user.id, `${user.name} accepted their invite`);
     save();
-    return startChallenge(user.id, true);
+    return session;
   },
 
   async dashboard(): Promise<DashboardSummary> {

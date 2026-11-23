@@ -2,12 +2,10 @@ import { useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/api';
-import type { LoginResult } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { Field, Input } from '@/components/ui/Field';
 import { InlineError, Spinner } from '@/components/ui/States';
 import { AuthLayout } from './AuthLayout';
-import { MfaStep } from './MfaStep';
 import { passwordProblem } from './passwordRules';
 import { useCompleteSignIn } from './useCompleteSignIn';
 
@@ -18,7 +16,6 @@ export function AcceptInvitePage() {
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
-  const [step, setStep] = useState<LoginResult | null>(null);
   const complete = useCompleteSignIn();
   const problem = passwordProblem(form.password, form.confirm);
 
@@ -34,14 +31,6 @@ export function AcceptInvitePage() {
     );
   }
 
-  if (step) {
-    return (
-      <AuthLayout title="Set up two-factor sign-in" subtitle={invite.data?.email}>
-        <MfaStep result={step} onDone={complete} />
-      </AuthLayout>
-    );
-  }
-
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setTouched(true);
@@ -49,7 +38,7 @@ export function AcceptInvitePage() {
     setBusy(true);
     setError(null);
     try {
-      setStep(await api.acceptInvite(token, { name: form.name.trim(), password: form.password }));
+      complete(await api.acceptInvite(token, { name: form.name.trim(), password: form.password }));
     } catch (err) {
       setError(err);
     } finally {

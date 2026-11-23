@@ -1,11 +1,9 @@
 import { useState, type FormEvent } from 'react';
 import { api } from '@/api';
-import type { LoginResult } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { Field, Input } from '@/components/ui/Field';
 import { InlineError } from '@/components/ui/States';
 import { AuthLayout } from './AuthLayout';
-import { MfaStep } from './MfaStep';
 import { passwordProblem } from './passwordRules';
 import { useCompleteSignIn } from './useCompleteSignIn';
 
@@ -15,7 +13,6 @@ export function SetupPage() {
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
-  const [step, setStep] = useState<LoginResult | null>(null);
   const complete = useCompleteSignIn();
   const problem = passwordProblem(form.password, form.confirm);
 
@@ -26,21 +23,13 @@ export function SetupPage() {
     setBusy(true);
     setError(null);
     try {
-      setStep(await api.setup({ name: form.name.trim(), email: form.email.trim(), password: form.password }));
+      complete(await api.setup({ name: form.name.trim(), email: form.email.trim(), password: form.password }));
     } catch (err) {
       setError(err);
     } finally {
       setBusy(false);
     }
   };
-
-  if (step) {
-    return (
-      <AuthLayout title="Set up two-factor sign-in" subtitle={form.email}>
-        <MfaStep result={step} onDone={complete} />
-      </AuthLayout>
-    );
-  }
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value });
 

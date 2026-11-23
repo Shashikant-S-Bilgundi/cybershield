@@ -44,13 +44,14 @@ export function agentInstallSnippet(secret: string) {
   return `curl -fsSL ${INGEST_URL.replace(/\/v1$/, '')}/agent/install.sh | sudo SHIELDOPS_AGENT_TOKEN=${secret} sh`;
 }
 
+/** Uses the image you build from the API folder: docker build -t shieldops-agent:1 agent/ */
 export function agentDockerSnippet(secret: string) {
   return `docker run -d --name shieldops-agent --restart unless-stopped \\
   --pid host --network host \\
   -v /:/host:ro -v /var/run/docker.sock:/var/run/docker.sock:ro \\
   -e SHIELDOPS_AGENT_TOKEN=${secret} \\
   -e SHIELDOPS_ENDPOINT=${INGEST_URL} \\
-  ghcr.io/shieldops/agent:1`;
+  shieldops-agent:1`;
 }
 
 export function reactNativeSnippet(environment: string) {
@@ -78,8 +79,7 @@ export function releaseSnippet() {
 }
 
 export function probeSnippet(secret: string) {
-  return `docker run -d --name shieldops-probe --restart unless-stopped \\
-  -e SHIELDOPS_PROBE_TOKEN=${secret} \\
-  -e SHIELDOPS_ENDPOINT=${INGEST_URL} \\
-  ghcr.io/shieldops/probe:1`;
+  // The probe is the ShieldOps agent in probe mode: the installer downloads it from your ShieldOps server,
+  // checks its SHA-256, and runs it as a hardened systemd service.
+  return `curl -fsSL ${INGEST_URL.replace(/\/v1$/, '')}/agent/install.sh | sudo SHIELDOPS_PROBE_TOKEN=${secret} sh`;
 }

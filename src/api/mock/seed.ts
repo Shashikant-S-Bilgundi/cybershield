@@ -68,10 +68,10 @@ export function emptyDb(): MockDb {
 export function seedDb(): MockDb {
   const t = now();
   const users: MockDb['users'] = [
-    { id: 'u1', name: 'Demo User', email: 'demo@shieldops.local', password: 'ShieldOps!2026', status: 'active', mfaEnabled: true, lastLoginAt: iso(t - 2 * DAY), invitedBy: null, createdAt: iso(t - 120 * DAY) },
-    { id: 'u2', name: 'Ananya Rao', email: 'ananya@example.com', password: 'x', status: 'active', mfaEnabled: true, lastLoginAt: iso(t - 3 * 60 * MIN), invitedBy: 'u1', createdAt: iso(t - 90 * DAY) },
-    { id: 'u3', name: 'Kiran Shetty', email: 'kiran@example.com', password: 'x', status: 'active', mfaEnabled: true, lastLoginAt: iso(t - 1 * DAY), invitedBy: 'u1', createdAt: iso(t - 75 * DAY) },
-    { id: 'u4', name: 'Meera Iyer', email: 'meera@example.com', password: 'x', status: 'disabled', mfaEnabled: true, lastLoginAt: iso(t - 40 * DAY), invitedBy: 'u2', createdAt: iso(t - 60 * DAY) },
+    { id: 'u1', name: 'Demo User', email: 'demo@shieldops.local', password: 'ShieldOps!2026', status: 'active', lastLoginAt: iso(t - 2 * DAY), invitedBy: null, createdAt: iso(t - 120 * DAY) },
+    { id: 'u2', name: 'Ananya Rao', email: 'ananya@example.com', password: 'x', status: 'active', lastLoginAt: iso(t - 3 * 60 * MIN), invitedBy: 'u1', createdAt: iso(t - 90 * DAY) },
+    { id: 'u3', name: 'Kiran Shetty', email: 'kiran@example.com', password: 'x', status: 'active', lastLoginAt: iso(t - 1 * DAY), invitedBy: 'u1', createdAt: iso(t - 75 * DAY) },
+    { id: 'u4', name: 'Meera Iyer', email: 'meera@example.com', password: 'x', status: 'disabled', lastLoginAt: iso(t - 40 * DAY), invitedBy: 'u2', createdAt: iso(t - 60 * DAY) },
   ];
 
   const app = (

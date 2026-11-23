@@ -75,7 +75,6 @@ import type {
   DashboardSummary,
   EnvironmentType,
   Invite,
-  LoginResult,
   Paged,
   Session,
   SystemSettings,
@@ -320,14 +319,15 @@ export type MaintenanceWindowInput = Omit<MaintenanceWindow, 'id' | 'createdBy'>
  */
 export interface ShieldOpsApi {
   setupStatus(): Promise<{ needsSetup: boolean }>;
-  setup(input: { name: string; email: string; password: string }): Promise<LoginResult>;
-  login(email: string, password: string): Promise<LoginResult>;
-  verifyMfa(challengeId: string, code: string): Promise<Session>;
+  /** Creates the first account and signs it in. */
+  setup(input: { name: string; email: string; password: string }): Promise<Session>;
+  login(email: string, password: string): Promise<Session>;
   me(): Promise<Session | null>;
   logout(): Promise<void>;
-  reauth(input: { password?: string; code?: string }): Promise<{ reauthUntil: string }>;
+  reauth(input: { password: string }): Promise<{ reauthUntil: string }>;
   getInvite(token: string): Promise<{ email: string; expiresAt: string }>;
-  acceptInvite(token: string, input: { name: string; password: string }): Promise<LoginResult>;
+  /** Creates the invited account and signs it in. */
+  acceptInvite(token: string, input: { name: string; password: string }): Promise<Session>;
 
   dashboard(): Promise<DashboardSummary>;
 
@@ -461,7 +461,7 @@ export interface ShieldOpsApi {
    * critical. GitHub redirects to install the GitHub App. Docker Hub takes { username, token };
    * Slack takes { url, channel }; Webhook takes { url } and returns its signing secret once.
    */
-  connectIntegration(type: IntegrationType, credentials?: Record<string, string>): Promise<Integration & { secret?: string }>;
+  connectIntegration(type: IntegrationType, credentials?: Record<string, string>): Promise<Integration & { secret?: string; redirectUrl?: string }>;
   /** critical */
   disconnectIntegration(type: IntegrationType): Promise<Integration>;
 
@@ -529,8 +529,8 @@ export interface ShieldOpsApi {
   /* Phase 8: advanced */
   /** Public: tells the sign-in page whether to show an SSO button. */
   getSsoConfig(): Promise<{ enabled: boolean; provider: 'google' | 'entra'; allowPasswordFallback: boolean }>;
-  /** Starts SSO; the real backend redirects to the identity provider and back. ShieldOps two-factor still follows. */
-  ssoLogin(provider: 'google' | 'entra'): Promise<LoginResult>;
+  /** Starts SSO; the real backend redirects to the identity provider and back. */
+  ssoLogin(provider: 'google' | 'entra'): Promise<Session>;
 
   listReleases(filter?: { applicationId?: string }): Promise<Release[]>;
   searchLogs(query: LogQuery): Promise<LogResult>;
